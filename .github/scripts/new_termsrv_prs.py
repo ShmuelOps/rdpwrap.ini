@@ -2,10 +2,10 @@
 
 --plan     (Linux)   list missing builds, drop the ones already handled, write `builds=<json>`
                      to $GITHUB_OUTPUT. Env: FINDER_VERSION, MAX_PRS (default 5), GH_TOKEN.
---offsets  (Windows) for each planned build: download termsrv.dll from the Microsoft symbol
-                     server, check its sha256, run RDPWrapOffsetFinder, insert [ver] and
-                     [ver-SLInit] at their sorted positions, open a PR.
-                     Env: BUILDS, FINDER, FINDER_VERSION, BASE, DRY_RUN, GH_TOKEN.
+--offsets  for each planned build: download termsrv.dll from the Microsoft symbol server,
+           check its sha256, run RDPWrapOffsetFinder.exe (under $WINE when set, e.g. on
+           Linux), insert [ver] and [ver-SLInit] at their sorted positions, open a PR.
+           Env: BUILDS, FINDER, WINE (optional), FINDER_VERSION, BASE, DRY_RUN, GH_TOKEN.
 --rebase   re-create open auto/termsrv-* PRs that conflict with BASE (run after merges).
 --test     offline self-check.
 
@@ -176,7 +176,10 @@ def find_offsets(finder, b):
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "termsrv.dll")
         open(path, "wb").write(dll)
-        r = subprocess.run([finder, path], capture_output=True)
+        wine = os.environ.get("WINE")
+        # Under Wine the .exe sees the Linux file system as drive Z:.
+        cmd = [wine, finder, "Z:" + path.replace("/", "\\")] if wine else [finder, path]
+        r = subprocess.run(cmd, capture_output=True)
     out = (r.stdout + r.stderr).decode("ascii", "replace").replace("\r\n", "\n")
     if "ERROR" in out or "Symbol not found" in out:
         return "OffsetFinder failed:\n" + out
